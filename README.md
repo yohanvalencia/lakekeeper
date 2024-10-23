@@ -16,7 +16,7 @@ This is Lakekeeper: A Rust-native implementation of the [Apache Iceberg](https:/
 If you have questions, feature requests or just want a chat, we are hanging around in [Discord](https://discord.gg/jkAGG8p93B)!
 
 <p align="center">
-<img src="https://github.com/lakekeeper/lakekeeper/raw/ct/lakekeeper-readme/assets/Lakekeeper-Overview.png" width="500">
+<img src="https://github.com/lakekeeper/lakekeeper/raw/main/assets/Lakekeeper-Overview.png" width="500">
 </p>
 
 # Next Steps
