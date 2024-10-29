@@ -155,6 +155,8 @@ Following options are global and apply to all warehouses:
 
 ### General
 
+Previous to Lakekeeper Version `0.5.0` please prefix all environment variables with `ICEBERG_REST__` instead of `LAKEKEEPER__`.
+
 | Variable                                           | Example                    | Description                                                                                                                                                                                                                                                               |
 |----------------------------------------------------|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `LAKEKEEPER__BASE_URI`                             | `https://example.com:8080` | Base URL where the catalog is externally reachable. Default: `https://localhost:8080`                                                                                                                                                                                     |
