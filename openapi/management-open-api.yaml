@@ -56,7 +56,7 @@ paths:
       summary: Delete the default project
       operationId: delete_default_project
       responses:
-        '200':
+        '204':
           description: Project deleted successfully
   /management/v1/default-project/rename:
     post:
@@ -179,7 +179,7 @@ paths:
               $ref: '#/components/schemas/UpdateNamespaceAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/namespace/{namespace_id}/managed-access:
     post:
@@ -223,7 +223,7 @@ paths:
     get:
       tags:
       - permissions
-      summary: Get user and role assignments to the current project
+      summary: Get user and role assignments of a project
       operationId: get_project_assignments
       parameters:
       - name: relations
@@ -254,7 +254,7 @@ paths:
               $ref: '#/components/schemas/UpdateProjectAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/project/{project_id}/access:
     get:
@@ -327,7 +327,7 @@ paths:
               $ref: '#/components/schemas/UpdateProjectAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/role/{role_id}/access:
     get:
@@ -354,17 +354,17 @@ paths:
     get:
       tags:
       - permissions
-      summary: Get user and role assignments to the current project
+      summary: Get user and role assignments of a role
       operationId: get_role_assignments_by_id
       parameters:
       - name: relations
-        in: path
+        in: query
         description: Relations to be loaded. If not specified, all relations are returned.
-        required: true
+        required: false
         schema:
           type: array
           items:
-            $ref: '#/components/schemas/ProjectRelation'
+            $ref: '#/components/schemas/RoleRelation'
           nullable: true
       - name: role_id
         in: path
@@ -383,7 +383,7 @@ paths:
     post:
       tags:
       - permissions
-      summary: Update permissions for a view
+      summary: Update permissions for a role
       operationId: update_role_assignments_by_id
       parameters:
       - name: role_id
@@ -400,7 +400,7 @@ paths:
               $ref: '#/components/schemas/UpdateRoleAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/server/access:
     get:
@@ -420,7 +420,7 @@ paths:
     get:
       tags:
       - permissions
-      summary: Get user and role assignments to the current project
+      summary: Get user and role assignments of the server
       operationId: get_server_assignments
       parameters:
       - name: relations
@@ -451,7 +451,7 @@ paths:
               $ref: '#/components/schemas/UpdateServerAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/table/{namespace_id}/assignments:
     get:
@@ -525,7 +525,7 @@ paths:
               $ref: '#/components/schemas/UpdateTableAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/view/{view_id}/access:
     get:
@@ -569,7 +569,7 @@ paths:
               $ref: '#/components/schemas/UpdateViewAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/warehouse/{warehouse_id}:
     get:
@@ -663,7 +663,7 @@ paths:
               $ref: '#/components/schemas/UpdateWarehouseAssignmentsRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Permissions updated successfully
   /management/v1/permissions/warehouse/{warehouse_id}/managed-access:
     post:
@@ -755,7 +755,7 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
+        '204':
           description: Project deleted successfully
   /management/v1/project/{project_id}/rename:
     post:
@@ -904,8 +904,27 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
+        '204':
           description: Role deleted successfully
+  /management/v1/search/role:
+    post:
+      tags:
+      - role
+      summary: Search for roles (Fuzzy)
+      operationId: search_role
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRoleRequest'
+        required: true
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchRoleResponse'
   /management/v1/search/user:
     post:
       tags:
@@ -1047,7 +1066,7 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
+        '204':
           description: User deleted successfully
   /management/v1/warehouse:
     get:
@@ -1143,7 +1162,7 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
+        '204':
           description: Warehouse deleted successfully
   /management/v1/warehouse/{warehouse_id}/activate:
     post:
@@ -2251,6 +2270,11 @@ components:
         title: RoleAssignmentOwnership
       discriminator:
         propertyName: type
+    RoleRelation:
+      type: string
+      enum:
+      - assignee
+      - ownership
     S3Credential:
       oneOf:
       - type: object
@@ -2838,6 +2862,7 @@ components:
           user:
             type: string
             format: uuid
+            description: Id of the user
       - type: object
         title: UserOrRoleRole
         required:
@@ -2846,6 +2871,8 @@ components:
           role:
             type: string
             format: uuid
+            description: Id of the role
+      description: Identifies a user or a role
     UserType:
       type: string
       description: Type of a User
@@ -2943,26 +2970,26 @@ components:
     WarehouseAction:
       type: string
       enum:
-      - CreateNamespace
-      - Delete
-      - ModifyStorage
-      - ModifyStorageCredential
-      - GetConfig
-      - GetMetadata
-      - ListNamespaces
-      - IncludeInList
-      - Deactivate
-      - Activate
-      - Rename
-      - ListDeletedTabulars
-      - ReadAssignments
-      - GrantCreate
-      - GrantDescribe
-      - GrantModify
-      - GrantSelect
-      - GrantPassGrants
-      - GrantManageGrants
-      - ChangeOwnership
+      - create_namespace
+      - delete
+      - modify_storage
+      - modify_storage_credential
+      - get_config
+      - get_metadata
+      - list_namespaces
+      - include_in_list
+      - deactivate
+      - activate
+      - rename
+      - list_deleted_tabulars
+      - read_assignments
+      - grant_create
+      - grant_describe
+      - grant_modify
+      - grant_select
+      - grant_pass_grants
+      - grant_manage_grants
+      - change_ownership
     WarehouseAssignment:
       oneOf:
       - allOf:
