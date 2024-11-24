@@ -1,12 +1,12 @@
 use crate::{
     request_metadata::RequestMetadata,
     service::{
+        authn::Actor,
         authz::{
             Authorizer, CatalogNamespaceAction, CatalogProjectAction, CatalogServerAction,
             CatalogTableAction, CatalogViewAction, CatalogWarehouseAction, ErrorModel,
             ListProjectsResponse, Result,
         },
-        token_verification::Actor,
         NamespaceIdentUuid, TableIdentUuid,
     },
     ProjectIdent, WarehouseIdent, CONFIG,
@@ -40,12 +40,13 @@ mod relations;
 mod service_ext;
 
 use crate::api::ApiContext;
+use crate::service::authn::UserId;
 use crate::service::authz::implementations::openfga::client::ClientConnection;
 use crate::service::authz::implementations::openfga::relations::OpenFgaRelation;
 use crate::service::authz::implementations::FgaType;
 use crate::service::authz::{CatalogRoleAction, CatalogUserAction, NamespaceParent};
 use crate::service::health::Health;
-use crate::service::{AuthDetails, Catalog, RoleId, SecretStore, State, UserId, ViewIdentUuid};
+use crate::service::{AuthDetails, Catalog, RoleId, SecretStore, State, ViewIdentUuid};
 pub(crate) use client::new_client_from_config;
 pub use client::{
     new_authorizer_from_config, BearerOpenFGAAuthorizer, ClientCredentialsOpenFGAAuthorizer,
@@ -1242,7 +1243,7 @@ pub(crate) mod tests {
         #[tokio::test]
         async fn test_list_projects() {
             let authorizer = new_authorizer_in_empty_store().await;
-            let user_id = UserId::new("this_user").unwrap();
+            let user_id = UserId::oidc("this_user").unwrap();
             let actor = Actor::Principal(user_id.clone());
             let project = ProjectIdent::from(uuid::Uuid::now_v7());
 
