@@ -15,17 +15,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
-use std::time::Duration;
 use veil::Redact;
 
 use super::StorageType;
 
-static S3_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::ClientBuilder::new()
-        .pool_idle_timeout(Duration::from_millis(18500))
-        .build()
-        .expect("This should never fail since we are just setting timeout to 18500 which does not populate config.error")
-});
+static S3_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 #[derive(Debug, Eq, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "kebab-case")]
