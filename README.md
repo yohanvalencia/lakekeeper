@@ -15,7 +15,7 @@
 [![Starrocks Integration](https://github.com/lakekeeper/lakekeeper/actions/workflows/starrocks-integration.yml/badge.svg)](https://github.com/lakekeeper/lakekeeper/actions/workflows/starrocks-integration.yml)
 
 
-Please visit [docs.lakekeeper.io](docs.lakekeeper.io) for Documentation!
+Please visit [https://docs.lakekeeper.io](https://docs.lakekeeper.io) for Documentation!
 
 This is Lakekeeper: A **secure**, **fast** and **easy to use**  implementation of the [Apache Iceberg](https://iceberg.apache.org/) REST Catalog specification based on [apache/iceberg-rust](https://github.com/apache/iceberg-rust). If you have questions, feature requests or just want a chat, we are hanging around in [Discord](https://discord.gg/jkAGG8p93B)!
 
