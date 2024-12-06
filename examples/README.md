@@ -8,7 +8,7 @@ All examples are self-contained and run all services required for the specific s
 Currently two szenarios are available:
 
 ## Minimal
-Runs Lakekeeper without Authentication and Authorization (unprotected). The example contains Jupyter (with Spark), Trino and Starrocks as query engines, minio as storage and Lakekeeper connected to a Postgres database.
+Runs Lakekeeper without Authentication and Authorization (unprotected). The example contains Jupyter (with Spark), Trino and Starrocks as query engines, Minio as storage and Lakekeeper connected to a Postgres database.
 
 To run the example run the following commands:
 
