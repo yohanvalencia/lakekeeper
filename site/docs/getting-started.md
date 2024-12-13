@@ -133,12 +133,12 @@ ICEBERG_VERSION = "1.6.1"
 
 # if you use adls as storage backend, you need iceberg-azure instead of iceberg-aws-bundle
 configuration = {
-    "spark.jars.packages": f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_MINOR_VERSION}_2.12:{ICEBERG_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_VERSION}",
+    "spark.jars.packages": f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_MINOR_VERSION}_2.12:{ICEBERG_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_VERSION},org.apache.iceberg:iceberg-azure-bundle:{ICEBERG_VERSION},org.apache.iceberg:iceberg-gcp-bundle:{ICEBERG_VERSION}",
     "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
     "spark.sql.defaultCatalog": "demo",
     "spark.sql.catalog.demo": "org.apache.iceberg.spark.SparkCatalog",
     "spark.sql.catalog.demo.catalog-impl": "org.apache.iceberg.rest.RESTCatalog",
-    "spark.sql.catalog.demo.uri": "http://localhost:8080/catalog/",
+    "spark.sql.catalog.demo.uri": "http://localhost:8181/catalog/",
     "spark.sql.catalog.demo.token": "dummy",
     "spark.sql.catalog.demo.warehouse": "my-warehouse",
 }
