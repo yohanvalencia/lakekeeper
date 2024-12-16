@@ -450,3 +450,9 @@ impl TryFrom<Prefix> for WarehouseIdent {
         Ok(WarehouseIdent(prefix))
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TabularDetails {
+    pub ident: TableIdentUuid,
+    pub location: String,
+}

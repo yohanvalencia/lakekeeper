@@ -1,7 +1,7 @@
 use super::authz::TableUuid;
 use super::{
     storage::StorageProfile, NamespaceIdentUuid, ProjectIdent, RoleId, TableIdentUuid,
-    ViewIdentUuid, WarehouseIdent, WarehouseStatus,
+    TabularDetails, ViewIdentUuid, WarehouseIdent, WarehouseStatus,
 };
 pub use crate::api::iceberg::v1::{
     CreateNamespaceRequest, CreateNamespaceResponse, ListNamespacesQuery, NamespaceIdent, Result,
@@ -636,6 +636,19 @@ where
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
         pagination_query: PaginationQuery,
     ) -> Result<PaginatedMapping<TabularIdentUuid, (TabularIdentOwned, Option<DeletionDetails>)>>;
+
+    async fn load_storage_profile(
+        warehouse_id: WarehouseIdent,
+        tabular_id: TableIdentUuid,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
+    ) -> Result<(Option<SecretIdent>, StorageProfile)>;
+
+    async fn resolve_table_ident(
+        warehouse_id: WarehouseIdent,
+        table: &TableIdent,
+        list_flags: ListFlags,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
+    ) -> Result<Option<TabularDetails>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
