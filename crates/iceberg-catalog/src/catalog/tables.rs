@@ -1213,6 +1213,7 @@ impl CommitContext {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn calculate_diffs(
     new_metadata: &TableMetadata,
     previous_metadata: &TableMetadata,
@@ -1306,6 +1307,40 @@ fn calculate_diffs(
             .saturating_sub(usize::from(head_of_snapshot_log_changed)),
     );
 
+    let old_stats = previous_metadata
+        .statistics_iter()
+        .map(|s| s.snapshot_id)
+        .collect::<FxHashSet<_>>();
+    let new_stats = new_metadata
+        .statistics_iter()
+        .map(|s| s.snapshot_id)
+        .collect::<FxHashSet<_>>();
+    let removed_stats = old_stats
+        .difference(&new_stats)
+        .copied()
+        .collect::<Vec<_>>();
+    let added_stats = new_stats
+        .difference(&old_stats)
+        .copied()
+        .collect::<Vec<_>>();
+
+    let old_partition_stats = previous_metadata
+        .partition_statistics_iter()
+        .map(|s| s.snapshot_id)
+        .collect::<FxHashSet<_>>();
+    let new_partition_stats = new_metadata
+        .partition_statistics_iter()
+        .map(|s| s.snapshot_id)
+        .collect::<FxHashSet<_>>();
+    let removed_partition_stats = old_partition_stats
+        .difference(&new_partition_stats)
+        .copied()
+        .collect::<Vec<_>>();
+    let added_partition_stats = new_partition_stats
+        .difference(&old_partition_stats)
+        .copied()
+        .collect::<Vec<_>>();
+
     TableMetadataDiffs {
         removed_snapshots: removed_snaps,
         added_snapshots,
@@ -1322,6 +1357,10 @@ fn calculate_diffs(
         n_removed_snapshot_log,
         expired_metadata_logs,
         added_metadata_log,
+        added_stats,
+        removed_stats,
+        added_partition_stats,
+        removed_partition_stats,
     }
 }
 
@@ -1342,6 +1381,10 @@ pub(crate) struct TableMetadataDiffs {
     pub(crate) n_removed_snapshot_log: usize,
     pub(crate) expired_metadata_logs: usize,
     pub(crate) added_metadata_log: usize,
+    pub(crate) added_stats: Vec<i64>,
+    pub(crate) removed_stats: Vec<i64>,
+    pub(crate) added_partition_stats: Vec<i64>,
+    pub(crate) removed_partition_stats: Vec<i64>,
 }
 
 pub(crate) fn determine_table_ident(
@@ -1980,18 +2023,18 @@ mod test {
     #[sqlx::test]
     async fn test_set_ref(pool: PgPool) {
         let (ctx, ns, ns_params, table) = commit_test_setup(pool).await;
-
+        let last_updated = table.metadata.last_updated_ms();
         let builder = table.metadata.into_builder(table.metadata_location);
 
         let snapshot = Snapshot::builder()
             .with_snapshot_id(1)
-            .with_timestamp_ms(builder.last_updated_ms() + 1)
+            .with_timestamp_ms(last_updated + 1)
             .with_sequence_number(0)
             .with_schema_id(0)
             .with_manifest_list("/snap-1.avro")
             .with_summary(Summary {
                 operation: Operation::Append,
-                other: HashMap::from_iter(vec![
+                additional_properties: HashMap::from_iter(vec![
                     (
                         "spark.app.id".to_string(),
                         "local-1662532784305".to_string(),
@@ -2196,17 +2239,18 @@ mod test {
             namespace: ns.namespace.clone(),
             name: "tab-1".to_string(),
         };
+        let last_updated = table.metadata.last_updated_ms();
         let builder = table.metadata.into_builder(table.metadata_location);
 
         let snap = Snapshot::builder()
             .with_snapshot_id(1)
-            .with_timestamp_ms(builder.last_updated_ms() + 1)
+            .with_timestamp_ms(last_updated + 1)
             .with_sequence_number(0)
             .with_schema_id(0)
             .with_manifest_list("/snap-1.avro")
             .with_summary(Summary {
                 operation: Operation::Append,
-                other: HashMap::from_iter(vec![
+                additional_properties: HashMap::from_iter(vec![
                     (
                         "spark.app.id".to_string(),
                         "local-1662532784305".to_string(),
@@ -2270,18 +2314,19 @@ mod test {
             serde_json::to_value(builder.metadata.clone()).unwrap()
         );
 
+        let last_updated = tab.metadata.last_updated_ms();
         let builder = builder.metadata.into_builder(tab.metadata_location);
 
         let snap = Snapshot::builder()
             .with_snapshot_id(2)
             .with_parent_snapshot_id(Some(1))
-            .with_timestamp_ms(builder.last_updated_ms() + 1)
+            .with_timestamp_ms(last_updated + 1)
             .with_sequence_number(1)
             .with_schema_id(0)
             .with_manifest_list("/snap-2.avro")
             .with_summary(Summary {
                 operation: Operation::Append,
-                other: HashMap::from_iter(vec![
+                additional_properties: HashMap::from_iter(vec![
                     (
                         "spark.app.id".to_string(),
                         "local-1662532784305".to_string(),
@@ -2326,18 +2371,19 @@ mod test {
 
         assert_eq!(tab.metadata, builder.metadata);
 
+        let last_updated = tab.metadata.last_updated_ms();
         let builder = builder.metadata.into_builder(tab.metadata_location);
 
         let snap = Snapshot::builder()
             .with_snapshot_id(3)
-            .with_timestamp_ms(builder.last_updated_ms() + 1)
+            .with_timestamp_ms(last_updated + 1)
             .with_parent_snapshot_id(Some(2))
             .with_sequence_number(2)
             .with_schema_id(0)
             .with_manifest_list("/snap-2.avro")
             .with_summary(Summary {
                 operation: Operation::Append,
-                other: HashMap::from_iter(vec![
+                additional_properties: HashMap::from_iter(vec![
                     (
                         "spark.app.id".to_string(),
                         "local-1662532784305".to_string(),
