@@ -181,6 +181,9 @@ async fn serve_inner<A: Authorizer>(
     } else {
         None
     };
+    if k8s_token_verifier.is_none() && CONFIG.openid_provider_uri.is_none() {
+        tracing::warn!("Authentication is disabled. This is not suitable for production!");
+    }
     let (layer, metrics_future) =
         iceberg_catalog::metrics::get_axum_layer_and_install_recorder(CONFIG.metrics_port)?;
     let router = new_full_router::<PostgresCatalog, _, Secrets>(RouterArgs {
