@@ -4,4 +4,4 @@ set -e
 
 ./dev/setup_env.sh
 
-mkdocs serve --dirty --watch .
+mkdocs serve -a localhost:8087 --dirty --watch .
