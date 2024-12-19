@@ -73,26 +73,6 @@ pub struct TableConfig {
     pub(crate) config: TableProperties,
 }
 
-fn supported_endpoints() -> Vec<String> {
-    vec![
-        "GET /v1/{prefix}/namespaces".into(),
-        "POST /v1/{prefix}/namespaces".into(),
-        "GET /v1/{prefix}/namespaces/{namespace}".into(),
-        "DELETE /v1/{prefix}/namespaces/{namespace}".into(),
-        "POST /v1/{prefix}/namespaces/{namespace}/properties".into(),
-        "GET /v1/{prefix}/namespaces/{namespace}/tables".into(),
-        "POST /v1/{prefix}/namespaces/{namespace}/tables".into(),
-        "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}".into(),
-        "POST /v1/{prefix}/namespaces/{namespace}/tables/{table}".into(),
-        "DELETE /v1/{prefix}/namespaces/{namespace}/tables/{table}".into(),
-        "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}/credentials".into(),
-        "POST /v1/{prefix}/namespaces/{namespace}/register".into(),
-        "POST /v1/{prefix}/namespaces/{namespace}/tables/{table}/metrics".into(),
-        "POST /v1/{prefix}/tables/rename".into(),
-        "POST /v1/{prefix}/transactions/commit".into(),
-    ]
-}
-
 impl StorageProfile {
     #[must_use]
     pub fn generate_catalog_config(&self, warehouse_id: WarehouseIdent) -> CatalogConfig {
@@ -100,11 +80,12 @@ impl StorageProfile {
             StorageProfile::S3(profile) => profile.generate_catalog_config(warehouse_id),
             #[cfg(test)]
             StorageProfile::Test(_) => {
+                use crate::api;
                 use std::collections::HashMap;
                 CatalogConfig {
                     overrides: HashMap::default(),
                     defaults: HashMap::default(),
-                    endpoints: supported_endpoints(),
+                    endpoints: api::iceberg::supported_endpoints(),
                 }
             }
             StorageProfile::Adls(prof) => prof.generate_catalog_config(warehouse_id),
