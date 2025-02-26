@@ -165,6 +165,8 @@ services:
     depends_on:
       openfga-db:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
 
   openfga:
     depends_on:
