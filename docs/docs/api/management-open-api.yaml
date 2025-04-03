@@ -3059,6 +3059,7 @@ components:
       oneOf:
         - type: object
           title: S3CredentialAccessKey
+          description: Authenticate to AWS using access-key and secret-key.
           required:
             - aws-access-key-id
             - aws-secret-access-key
@@ -3072,6 +3073,26 @@ components:
               type: string
               enum:
                 - access-key
+            external-id:
+              type:
+                - string
+                - 'null'
+        - type: object
+          title: S3CredentialSystemIdentity
+          description: |-
+            Authenticate to AWS using the identity configured on the system
+             that runs lakekeeper. The AWS SDK is used to load the credentials.
+          required:
+            - credential-type
+          properties:
+            credential-type:
+              type: string
+              enum:
+                - aws-system-identity
+            external-id:
+              type:
+                - string
+                - 'null'
     S3Flavor:
       type: string
       enum:
@@ -3097,7 +3118,7 @@ components:
           type:
             - string
             - 'null'
-          description: Optional ARN to assume when accessing the bucket
+          description: Optional ARN to assume when accessing the bucket from Lakekeeper.
         bucket:
           type: string
           description: Name of the S3 bucket
@@ -3158,7 +3179,10 @@ components:
           type:
             - string
             - 'null'
-          description: Optional role ARN to assume for sts vended-credentials
+          description: |-
+            Optional role ARN to assume for sts vended-credentials.
+            If not provided, `assume_role_arn` is used.
+            Either `assume_role_arn` or `sts_role_arn` must be provided if `sts_enabled` is true.
     S3UrlStyleDetectionMode:
       type: string
       enum:

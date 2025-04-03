@@ -21,10 +21,18 @@ Some Lakekeeper endspoints return links pointing at Lakekeeper itself. By defaul
 | `LAKEKEEPER__SECRET_BACKEND`                     | `postgres`                             | The secret backend to use. If `kv2` (Hashicorp KV Version 2) is chosen, you need to provide [additional parameters](#vault-kv-version-2) Default: `postgres`, one-of: [`postgres`, `kv2`] |
 | `LAKEKEEPER__ALLOW_ORIGIN`                       | `*`                                    | A comma separated list of allowed origins for CORS. |
 
+### Storage
+
+| Variable                                                    | Example            | Description |
+|-------------------------------------------------------------|--------------------|-----|
+| `LAKEKEEPER__S3_ENABLE_SYSTEM_CREDENTIALS`                  | <nobr>`true`<nobr> | Lakekeeper can use system identities  (i.e. `AWS_*` environment variables or EC2 instance profiles) as storage credentials for Warehouses. This is disabled by default to not accidentally grant lakekeeper users access to locations that users should not be able to read or store tables in. When setting `LAKEKEEPER__S3_ENABLE_SYSTEM_CREDENTIALS` to `true`, Lakekeeper does allow the creation of Warehouses that use system credentials. Default: `false` (System credentials disabled) |
+| `LAKEKEEPER__S3_ENABLE_DIRECT_SYSTEM_CREDENTIALS`           | <nobr>`true`<nobr> | If a Warehouse is created using system credentials, by default, users are required to specify a `assume-role-arn`. Lakekeeper then assumes the specified role to access files. If `LAKEKEEPER__S3_ENABLE_DIRECT_SYSTEM_CREDENTIALS` is set to `true`, Lakekeeper allows the creation of Warehouses even without an `assume-role-arn` being specified, thus, the system user requires direct access to warehouse locations. Default: `false` (Credentials cannot be used without assuming a role) |
+| `LAKEKEEPER__S3_REQUIRE_EXTERNAL_ID_FOR_SYSTEM_CREDENTIALS` | <nobr>`true`<nobr> | If true, an `external-id` is required when assuming a role with system credentials. Default: `true` |
+
 
 ### Persistence Store
 
-Currently Lakekeeper supports only Postgres as a persistence store. You may either provide connection strings using `PG_DATABASE_URL_READ` or use the `PG_*` environment variables. Connection strings take precedence:
+Currently Lakekeeper supports only Postgres as a persistence store. You may either provide connection strings using `PG_DATABASE_URL_*` or use the `PG_*` environment variables. Connection strings take precedence:
 
 | Variable                                               | Example                                               | Description |
 |--------------------------------------------------------|-------------------------------------------------------|-----|
@@ -80,6 +88,7 @@ Lakekeeper can publish change events to Nats (Kafka is coming soon). The followi
 | `LAKEKEEPER__NATS_PASSWORD`                | `test-password`         | Password to authenticate against nats, needs `LAKEKEEPER__NATS_USER` |
 | <nobr>`LAKEKEEPER__NATS_CREDS_FILE`</nobr> | `/path/to/file.creds`   | Path to a file containing nats credentials |
 | `LAKEKEEPER__NATS_TOKEN`                   | `xyz`                   | Nats token to use for authentication |
+
 ### Logging Cloudevents
 
 Cloudevents can also be logged, if you do not have Nats up and running. This feature can be enabled by setting
@@ -172,8 +181,8 @@ When using the built-in UI which is hosted as part of the Lakekeeper binary, mos
 
 Lakekeeper collects statistics about the usage of its endpoints. Every Lakekeeper instance accumulates endpoint calls for a certain duration in memory before writing them into the database. The following configuration options are available:
 
-| Variable                                   | Example | Description                                                                                               |
-|--------------------------------------------|---------|-----------------------------------------------------------------------------------------------------------|
+| Variable                                   | Example | Description           |
+|--------------------------------------------|---------|-----------------------|
 | `LAKEKEEPER__ENDPOINT_STAT_FLUSH_INTERVAL` | 30s     | Interval in seconds to write endpoint statistics into the database. Default: 30s, valid units are (s\|ms) |
 
 ### SSL Dependencies
