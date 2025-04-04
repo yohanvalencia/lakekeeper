@@ -13,12 +13,13 @@ Lakekeeper is a rust-native Apache Iceberg REST Catalog implementation
 
 [features]
 all = [
+    "authz-openfga",
     "sqlx-postgres",
     "s3-signer",
     "router",
     "nats",
     "vendored-protoc",
-    "authz-openfga",
+    "kafka",
 ]
 sqlx-postgres = ["sqlx"]
 sqlx = ["dep:sqlx"]
@@ -26,6 +27,7 @@ s3-signer = ["dep:aws-sigv4", "dep:aws-credential-types"]
 router = ["dep:tower-http"]
 nats = ["dep:async-nats"]
 default = ["sqlx-postgres", "s3-signer", "router", "vendored-protoc"]
+kafka = ["dep:rdkafka", "dep:openssl-src"]
 vendored-protoc = []
 authz-openfga = ["dep:openfga-client"]
 
@@ -52,6 +54,7 @@ chrono = { workspace = true, features = ["serde"] }
 cloudevents-sdk = { workspace = true }
 derive_more = { workspace = true }
 figment = { workspace = true }
+figment_file_provider_adapter = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
@@ -76,6 +79,7 @@ paste = { workspace = true }
 percent-encoding = { workspace = true }
 rand = "0.9.0"
 reqwest = { workspace = true }
+rdkafka = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_yml = { workspace = true }
@@ -118,3 +122,8 @@ tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-test = "0.2.5"
+
+[build-dependencies]
+openssl-src = { version = "300.4.2", features = [
+    "force-engine",
+], default-features = false, optional = true }
