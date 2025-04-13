@@ -7,11 +7,18 @@ use super::compression_codec::CompressionCodec;
 use crate::{
     api::{ErrorModel, Result},
     retry::retry_fn,
-    service::storage::az::reduce_scheme_string as reduce_azure_scheme,
+    service::storage::az::{
+        reduce_scheme_string as reduce_azure_scheme,
+        ALTERNATIVE_PROTOCOLS as AZURE_ALTERNATIVE_PROTOCOLS,
+    },
 };
 
 fn normalize_location(location: &Location) -> String {
-    if location.as_str().starts_with("abfs") {
+    if location.as_str().starts_with("abfs")
+        || AZURE_ALTERNATIVE_PROTOCOLS
+            .iter()
+            .any(|p| location.as_str().starts_with(p))
+    {
         reduce_azure_scheme(location.as_str(), false)
     } else if location.scheme().starts_with("s3") {
         if location.scheme() == "s3" {

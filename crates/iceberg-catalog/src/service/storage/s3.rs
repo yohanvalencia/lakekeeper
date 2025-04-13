@@ -885,12 +885,6 @@ pub struct S3Location {
     custom_prefix: Option<String>,
 }
 
-impl std::fmt::Display for S3Location {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.location.fmt(f)
-    }
-}
-
 impl S3Location {
     /// Create a new S3 location.
     ///
@@ -1028,6 +1022,11 @@ impl S3Location {
     /// Always returns `s3://` prefixed location.
     pub(crate) fn into_normalized_location(self) -> Location {
         self.location
+    }
+
+    /// Always returns `s3://` prefixed location.
+    pub(crate) fn as_normalized_location(&self) -> &Location {
+        &self.location
     }
 }
 
@@ -1354,7 +1353,7 @@ pub(crate) mod test {
             let result = S3Location::try_from_str(location, false).unwrap();
             assert_eq!(result.bucket_name, bucket);
             assert_eq!(result.key, prefix);
-            assert_eq!(result.to_string(), location);
+            assert_eq!(result.into_normalized_location().to_string(), location);
         }
     }
 
@@ -1411,7 +1410,7 @@ pub(crate) mod test {
         ];
         for case in cases {
             let location = S3Location::try_from_str(case, false).unwrap();
-            let printed = location.to_string();
+            let printed = location.into_normalized_location().to_string();
             assert_eq!(printed, case);
         }
     }
