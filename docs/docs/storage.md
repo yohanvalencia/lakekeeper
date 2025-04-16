@@ -48,9 +48,10 @@ The following table describes all configuration parameters for an S3 storage pro
 | `key-prefix`                  | String  | No       | None                       | Subpath in the bucket to use for this warehouse. |
 | `endpoint`                    | URL     | No       | None                       | Optional endpoint URL for S3 requests. If not provided, the region will be used to determine the endpoint. If both are provided, the endpoint takes precedence. Example: `http://s3-de.my-domain.com:9000` |
 | `flavor`                      | String  | No       | `aws`                      | S3 flavor to use. Options: `aws` (Amazon S3) or `s3-compat` (for S3-compatible solutions like MinIO). |
+| `path-style-access`           | Boolean | No       | `false`                    | Whether to use path style access for S3 requests. If the underlying S3 supports both virtual host and path styles, we recommend not setting this option. |
 | `assume-role-arn`             | String  | No       | None                       | Optional ARN to assume when accessing the bucket from Lakekeeper. This is also used as the default for `sts-role-arn` if that is not specified. |
 | `sts-role-arn`                | String  | No       | Value of `assume-role-arn` | Optional role ARN to assume for STS vended-credentials. Either `assume-role-arn` or `sts-role-arn` must be provided if `sts-enabled` is true and `flavor` is `aws`. |
-| `path-style-access`           | Boolean | No       | `false`                    | Whether to use path style access for S3 requests. If the underlying S3 supports both virtual host and path styles, we recommend not setting this option. |
+| `sts-token-validity-seconds`  | Integer | No       | `3600`                     | The validity period of STS tokens in seconds. Controls how long the vended credentials remain valid before they need to be refreshed. |
 | `allow-alternative-protocols` | Boolean | No       | `false`                    | Whether to allow `s3a://` and `s3n://` in locations. This is disabled by default and should only be enabled for migrating legacy Hadoop-based tables via the register endpoint. Tables with `s3a` paths are not accessible outside the Java ecosystem. |
 | `remote-signing-url-style`    | String  | No       | `auto`                     | S3 URL style detection mode for remote signing. Options: `auto`, `path-style`, or `virtual-host`. When set to `auto`, Lakekeeper tries virtual-host style first, then path style. |
 | `push-s3-delete-disabled`     | Boolean | No       | `true`                     | Controls whether the `s3.delete-enabled=false` flag is sent to clients. Only has an effect if "soft-deletion" is enabled for this Warehouse. This prevents clients like Spark from directly deleting files during operations like `DROP TABLE xxx PURGE`, ensuring soft-deletion works properly. However, it also affects operations like `expire_snapshots` that require file deletion. For more information, please check the [Soft Deletion Documentation](./concepts.md#soft-deletion). |
@@ -284,6 +285,52 @@ An warehouse create call could look like this:
     }
 }
 ```
+
+### Cloudflare R2
+Lakekeeper supports Cloudflare R2 storage with all S3 compatible clients, including vended credentials via the `/accounts/{account_id}/r2/temp-access-credentials` Endpoint.
+
+First we create a new Bucket. In the cloudflare UI, Select "R2 Object Storage" -> "Overview" and select "+ Create Bucket". We call our bucket `lakekeeper-dev`. Click on the bucket, select the "Settings" tab, and note down the "S3 API" displayed.
+
+Secondly, we create an API Token for Lakekeeper as follows:
+
+1. Go back to the Overview Page ("R2 Object Storage" -> "Overview") and select "Manage API tokens" in the "{} API" dropdown.
+1. In the R2 token page select "Create Account API token". Give the token any name. Select the "Admin Read & Write" permission, this is unfortunately required at the time of writing, as the `/accounts/{account_id}/r2/temp-access-credentials` does not accept other tokens. Click "Create Account API Token".
+1. Note down the "Token value", "Access Key ID" and "Secret Access Key"
+
+Finally, we can create the Warehouse in Lakekeeper via the UI or API. A POST request to `/management/v1/warehouse` expects the following body:
+
+```json
+{
+  "warehouse-name": "r2_dev",
+  "delete-profile": { "type": "hard" },
+  "storage-credential":
+    {
+        "credential-type": "cloudflare-r2",
+        "account-id": "<Cloudflare Account ID, typically the long alphanumeric string before the first dot in the S3 API URL> ",
+        "access-key-id": "access-key-id-from-above",
+        "secret-access-key": "secret-access-key-from-above",
+        "token": "token-from-above",
+    },
+  "storage-profile":
+    {
+        "type": "s3",
+        "bucket": "<name of your cloudflare r2 bucket, lakekeeper-dev in our example>",
+        "region": "<your cloudflare region, i.e. eu>",
+        "key-prefix": "path/to/my/warehouse",
+        "endpoint": "<S3 API Endpoint, i.e. https://<account-id>.eu.r2.cloudflarestorage.com>"
+    },
+}
+```
+
+For cloudflare R2 credentials, the following parameters are automatically set:
+
+* `assume-role-arn` is set to None, as this is not supported
+* `sts-enabled` is set to `true`
+* `flavor` is set to `s3-compat`
+
+It is required to specify the `endpoint`
+
+
 
 ## Azure Data Lake Storage Gen 2
 

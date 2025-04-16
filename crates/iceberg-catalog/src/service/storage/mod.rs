@@ -282,7 +282,10 @@ impl StorageProfile {
     ///
     /// # Errors
     /// Fails if the underlying storage profile's normalization fails.
-    pub fn normalize(&mut self) -> Result<(), ValidationError> {
+    pub fn normalize(
+        &mut self,
+        credential: Option<&StorageCredential>,
+    ) -> Result<(), ValidationError> {
         // ------------- Common validations -------------
         // Test if we can generate a default namespace location
         let ns_location = self.default_namespace_location(NamespaceIdentUuid::default())?;
@@ -290,7 +293,9 @@ impl StorageProfile {
 
         // ------------- Profile specific validations -------------
         match self {
-            StorageProfile::S3(profile) => profile.normalize(),
+            StorageProfile::S3(profile) => {
+                profile.normalize(credential.map(|s| s.try_to_s3()).transpose()?)
+            }
             StorageProfile::Adls(prof) => prof.normalize(),
             #[cfg(test)]
             StorageProfile::Test(_) => Ok(()),
@@ -853,8 +858,14 @@ mod tests {
 
     use needs_env_var::needs_env_var;
 
-    use super::*;
-    use crate::catalog::io::{delete_file, read_file, write_metadata_file};
+    use super::{
+        s3::{S3AwsSystemIdentityCredential, S3CloudflareR2Credential},
+        *,
+    };
+    use crate::{
+        catalog::io::{delete_file, read_file, write_metadata_file},
+        service::storage::s3::S3AccessKeyCredential,
+    };
 
     #[test]
     fn test_split_location() {
@@ -902,8 +913,8 @@ mod tests {
     }
 
     #[test]
-    fn test_redact() {
-        let secrets: StorageCredential = S3Credential::AccessKey {
+    fn test_redact_s3_access_key() {
+        let secrets: StorageCredential = S3Credential::AccessKey(S3AccessKeyCredential {
             aws_access_key_id: "
                 AKIAIOSFODNN7EXAMPLE
             "
@@ -913,11 +924,35 @@ mod tests {
             "
             .to_string(),
             external_id: Some("abctnFEMI".to_string()),
-        }
+        })
         .into();
 
         let debug_print = format!("{secrets:?}");
         assert!(!debug_print.contains("tnFEMI"));
+    }
+
+    #[test]
+    fn test_redact_s3_external_id() {
+        let secrets: StorageCredential =
+            S3Credential::AwsSystemIdentity(S3AwsSystemIdentityCredential {
+                external_id: Some("abctnFEMI".to_string()),
+            })
+            .into();
+        let debug_print = format!("{secrets:?}");
+        assert!(!debug_print.contains("tnFEMI"));
+    }
+
+    #[test]
+    fn test_redact_cloudflare() {
+        let secrets: StorageCredential = S3Credential::CloudflareR2(S3CloudflareR2Credential {
+            access_key_id: "def".to_string(),
+            secret_access_key: "abc".to_string(),
+            token: "abc".to_string(),
+            account_id: "hij".to_string(),
+        })
+        .into();
+        let debug_print = format!("{secrets:?}");
+        assert!(!debug_print.contains("abc"));
     }
 
     #[test]
@@ -957,11 +992,11 @@ mod tests {
         let secret: StorageCredential = serde_json::from_value(value).unwrap();
         assert_eq!(
             secret,
-            StorageCredential::S3(S3Credential::AccessKey {
+            StorageCredential::S3(S3Credential::AccessKey(S3AccessKeyCredential {
                 aws_access_key_id: "AKIAIOSFODNN7EXAMPLE".to_string(),
                 aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string(),
                 external_id: None
-            })
+            }))
         );
     }
 
@@ -1078,11 +1113,11 @@ mod tests {
                 let bucket = std::env::var("AWS_S3_BUCKET").unwrap();
                 let region = std::env::var("AWS_S3_REGION").unwrap();
                 let sts_role_arn = std::env::var("AWS_S3_STS_ROLE_ARN").unwrap();
-                let cred: StorageCredential = S3Credential::AccessKey {
+                let cred: StorageCredential = S3Credential::AccessKey(S3AccessKeyCredential {
                     aws_access_key_id: std::env::var("AWS_S3_ACCESS_KEY_ID").unwrap(),
                     aws_secret_access_key: std::env::var("AWS_S3_SECRET_ACCESS_KEY").unwrap(),
                     external_id: None,
-                }
+                })
                 .into();
 
                 let mut profile: StorageProfile = S3Profile::builder()
@@ -1103,7 +1138,7 @@ mod tests {
 
     #[needs_env_var(TEST_AWS = 1)]
     #[tokio::test]
-    #[tracing_test::traced_test]
+    // #[tracing_test::traced_test]
     async fn test_validate_aws() {
         use super::s3::test::aws::get_storage_profile;
 
@@ -1118,8 +1153,8 @@ mod tests {
 
     #[needs_env_var::needs_env_var(TEST_MINIO = 1)]
     #[test]
-    fn test_vended_minio() {
-        use super::s3::test::minio::storage_profile;
+    fn test_vended_s3_compat() {
+        use super::s3::test::s3_compat::storage_profile;
 
         crate::test::test_block_on(
             async {
@@ -1136,7 +1171,9 @@ mod tests {
 
     #[allow(dead_code, clippy::too_many_lines)]
     async fn test_profile(cred: &StorageCredential, profile: &mut StorageProfile) {
-        profile.normalize().expect("Failed to normalize profile");
+        profile
+            .normalize(Some(cred))
+            .expect("Failed to normalize profile");
         let base_location = profile
             .base_location()
             .expect("Failed to get base location");

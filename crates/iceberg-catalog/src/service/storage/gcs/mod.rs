@@ -532,7 +532,9 @@ pub(crate) mod test {
 
             let mut profile: StorageProfile = profile.into();
 
-            profile.normalize().expect("Failed to normalize profile");
+            profile
+                .normalize(Some(&cred))
+                .expect("Failed to normalize profile");
             profile.validate_access(Some(&cred), None).await.unwrap();
         }
 

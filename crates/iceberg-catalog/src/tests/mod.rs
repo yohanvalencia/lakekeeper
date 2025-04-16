@@ -40,7 +40,8 @@ use crate::{
         contract_verification::ContractVerifiers,
         event_publisher::CloudEventsPublisher,
         storage::{
-            S3Credential, S3Flavor, S3Profile, StorageCredential, StorageProfile, TestProfile,
+            s3::S3AccessKeyCredential, S3Credential, S3Flavor, S3Profile, StorageCredential,
+            StorageProfile, TestProfile,
         },
         task_queue::{TaskQueueConfig, TaskQueues},
         Catalog, SecretStore, State, UserId,
@@ -64,11 +65,11 @@ pub(crate) fn minio_profile() -> (StorageProfile, StorageCredential) {
         .parse()
         .unwrap();
 
-    let cred: StorageCredential = S3Credential::AccessKey {
+    let cred: StorageCredential = S3Credential::AccessKey(S3AccessKeyCredential {
         aws_access_key_id,
         aws_secret_access_key,
         external_id: None,
-    }
+    })
     .into();
     let mut profile: StorageProfile = S3Profile::builder()
         .bucket(bucket)
@@ -81,7 +82,7 @@ pub(crate) fn minio_profile() -> (StorageProfile, StorageCredential) {
         .build()
         .into();
 
-    profile.normalize().unwrap();
+    profile.normalize(Some(&cred)).unwrap();
     (profile, cred)
 }
 
