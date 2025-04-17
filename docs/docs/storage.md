@@ -6,8 +6,7 @@ Currently, we support the following storages:
 
 - S3 (tested with AWS & Minio)
 - Azure Data Lake Storage Gen 2
-- Google Cloud Storage
-
+- Google Cloud Storage (with and without Hierarchical Namespaces)
 When creating a Warehouse or updating storage information, Lakekeeper validates the configuration.
 
 By default, Lakekeeper Warehouses enforce specific URI schemas for tables and views to ensure compatibility with most query engines:
@@ -423,7 +422,7 @@ The following table describes all configuration parameters for a GCS storage pro
 | `bucket`     | String | Yes      | -       | Name of the GCS bucket.         |
 | `key-prefix` | String | No       | None    | Subpath in the bucket to use for this warehouse. |
 
-For GCS, the bucket should have hierarchical namespaces disabled and the service account should have appropriate permissions (such as Storage Admin role) on the bucket.
+The service account should have appropriate permissions (such as Storage Admin role) on the bucket. Since Lakekeeper Version 0.8.2, hierarchical Namespaces are supported.
 
 ### Authentication Options
 
