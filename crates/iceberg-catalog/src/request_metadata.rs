@@ -287,7 +287,7 @@ fn determine_base_uri(headers: &HeaderMap) -> Option<String> {
             .and_then(|hv| hv.to_str().ok());
 
         let mut base_uri = String::new();
-        let proto = x_forwarded_proto.unwrap_or_else(|| {
+        let proto = x_forwarded_proto.unwrap_or({
             if any_x_forwarded_header_present {
                 // In the unlikely case that x-forwarded headers are present, but the proto header
                 // is missing, we assume https.
