@@ -287,24 +287,27 @@ fn determine_base_uri(headers: &HeaderMap) -> Option<String> {
             .and_then(|hv| hv.to_str().ok());
 
         let mut base_uri = String::new();
-        if let Some(proto) = x_forwarded_proto {
-            base_uri.push_str(proto);
-            base_uri.push_str("://");
-        } else {
-            // In the unlikely case that x-forwarded headers are present, but the proto header
-            // is missing, we assume https.
+        let proto = x_forwarded_proto.unwrap_or_else(|| {
             if any_x_forwarded_header_present {
-                base_uri.push_str("https://");
+                // In the unlikely case that x-forwarded headers are present, but the proto header
+                // is missing, we assume https.
+                "https"
             } else {
-                // Lakekeeper does not terminate TLS. Any external entity that terminates TLS should set the x-forwarded- headers.
-                base_uri.push_str("http://");
+                "http"
+            }
+        });
+        base_uri.push_str(proto);
+        base_uri.push_str("://");
+        base_uri.push_str(host);
+
+        // Skip port if it's the default port for the protocol
+        if let Some(port) = x_forwarded_port {
+            if !((proto == "https" && port == "443") || (proto == "http" && port == "80")) {
+                base_uri.push(':');
+                base_uri.push_str(port);
             }
         }
-        base_uri.push_str(host);
-        if let Some(port) = x_forwarded_port {
-            base_uri.push(':');
-            base_uri.push_str(port);
-        }
+
         Some(base_uri)
     } else {
         // If no BASE_URI is set and no x-forwarded headers are present, the encryption is unencrypted,
@@ -336,6 +339,34 @@ mod test {
             assert_eq!(host, Some("https://localhost:8181/a/b/".to_string()));
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_443_port_is_skipped_for_https() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            X_FORWARDED_HOST_HEADER,
+            HeaderValue::from_static("example.com"),
+        );
+        headers.insert(X_FORWARDED_PROTO_HEADER, HeaderValue::from_static("https"));
+        headers.insert(X_FORWARDED_PORT_HEADER, HeaderValue::from_static("443"));
+
+        let result = determine_base_uri(&headers);
+        assert_eq!(result, Some("https://example.com".to_string()));
+    }
+
+    #[test]
+    fn test_80_port_is_skipped_for_http() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            X_FORWARDED_HOST_HEADER,
+            HeaderValue::from_static("example.com"),
+        );
+        headers.insert(X_FORWARDED_PROTO_HEADER, HeaderValue::from_static("http"));
+        headers.insert(X_FORWARDED_PORT_HEADER, HeaderValue::from_static("80"));
+
+        let result = determine_base_uri(&headers);
+        assert_eq!(result, Some("http://example.com".to_string()));
     }
 
     #[test]
