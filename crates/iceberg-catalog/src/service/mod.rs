@@ -84,6 +84,27 @@ pub struct TableId(uuid::Uuid);
 #[serde(transparent)]
 pub struct WarehouseId(pub(crate) uuid::Uuid);
 
+impl NamespaceId {
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+}
+
+impl TableId {
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+}
+
+impl WarehouseId {
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+}
+
 /// Status of a warehouse
 #[derive(
     Debug,
@@ -129,11 +150,6 @@ impl<'de> serde::Deserialize<'de> for ProjectId {
     }
 }
 
-impl Default for ProjectId {
-    fn default() -> Self {
-        Self(uuid::Uuid::now_v7().to_string())
-    }
-}
 impl From<ProjectId> for String {
     fn from(ident: ProjectId) -> Self {
         ident.0
@@ -144,6 +160,11 @@ impl ProjectId {
     #[must_use]
     pub fn new(id: uuid::Uuid) -> Self {
         Self(id.to_string())
+    }
+
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7().to_string())
     }
 
     /// Create a new project id from a string.
@@ -206,10 +227,9 @@ impl RoleId {
     pub fn new(id: uuid::Uuid) -> Self {
         Self(id)
     }
-}
 
-impl Default for RoleId {
-    fn default() -> Self {
+    #[must_use]
+    pub fn new_random() -> Self {
         Self(uuid::Uuid::now_v7())
     }
 }
@@ -254,12 +274,6 @@ impl Deref for ViewId {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl Default for NamespaceId {
-    fn default() -> Self {
-        Self(uuid::Uuid::now_v7())
     }
 }
 
@@ -322,12 +336,6 @@ impl From<uuid::Uuid> for NamespaceId {
 impl From<&uuid::Uuid> for NamespaceId {
     fn from(uuid: &uuid::Uuid) -> Self {
         Self(*uuid)
-    }
-}
-
-impl Default for TableId {
-    fn default() -> Self {
-        Self(uuid::Uuid::now_v7())
     }
 }
 
