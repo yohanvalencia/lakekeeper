@@ -412,6 +412,7 @@ Fist, read the warning box above (!). Additionally as of June 2025, the Google I
 As we don't want to lower our security or switch to legacy flows, we are using a workaround to register the Lakekeeper UI as a Native Application (Universal Windows Platform in this example), which allows the use of the proper flows, even though it is intended for a different purpose.
 
 If you're using Google Cloud Platform, please advocate for proper OAuth standard support by:
+
 1. Reporting this concern to your Google sales representative
 2. Upvoting these issues: [912693](https://www.googlecloudcommunity.com/gc/Developer-Tools/Authorization-Code-Flow-without-client-secret/m-p/912693#M3618), [33416](https://www.googlecloudcommunity.com/gc/Apigee/Supporting-OAuth-quot-Public-quot-clients-in-authorization-code/m-p/33416)
 3. Sharing these discussions: [StackOverflow](https://stackoverflow.com/questions/60724690/using-google-oidc-with-code-flow-and-pkce) and [GitHub issue](https://github.com/authts/oidc-client-ts/issues/152)
