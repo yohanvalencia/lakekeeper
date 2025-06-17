@@ -75,6 +75,7 @@ pub enum CatalogWarehouseAction {
     CanGetMetadata,
     CanGetConfig,
     CanListNamespaces,
+    CanListEverything,
     CanUse,
     CanIncludeInList,
     CanDeactivate,
@@ -668,6 +669,11 @@ pub(crate) mod tests {
     /// Some tests require blocking certain actions without hiding the object, for instance
     /// forbid an action on a namespace without hiding the namespace. This can be achieved by
     /// blocking the action.
+    ///
+    /// # Note on unexpected visibility
+    ///
+    /// Due to `can_list_everything`, permissions on hidden objects may behave unexpectedly.
+    /// Consider calling [`Self::block_can_list_everything`] in such cases.
     pub(crate) struct HidingAuthorizer {
         /// Strings encode `object_type:object_id` e.g. `namespace:id_of_namespace_to_hide`.
         pub(crate) hidden: Arc<RwLock<HashSet<String>>>,
@@ -708,9 +714,11 @@ pub(crate) mod tests {
         /// tables. `can_list_everything` may work against that when it triggers short check paths
         /// that skip checking individual permissions.
         pub(crate) fn block_can_list_everything(&self) {
-            // TODO(#1175): block `warehouse:can_list_everything` once it's added
             self.block_action(
                 format!("namespace:{}", CatalogNamespaceAction::CanListEverything).as_str(),
+            );
+            self.block_action(
+                format!("warehouse:{}", CatalogWarehouseAction::CanListEverything).as_str(),
             );
         }
     }
