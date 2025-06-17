@@ -98,6 +98,7 @@ pub enum CatalogNamespaceAction {
     CanListTables,
     CanListViews,
     CanListNamespaces,
+    CanListEverything,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, strum_macros::Display, EnumIter, EnumString)]
@@ -699,6 +700,18 @@ pub(crate) mod tests {
                 .write()
                 .unwrap()
                 .insert(object.to_string());
+        }
+
+        /// Blocks `can_list_everything` action on every object it is defined for.
+        ///
+        /// This is helpful for tests that hide a subset of objects, e.g. *some* but not all
+        /// tables. `can_list_everything` may work against that when it triggers short check paths
+        /// that skip checking individual permissions.
+        pub(crate) fn block_can_list_everything(&self) {
+            // TODO(#1175): block `warehouse:can_list_everything` once it's added
+            self.block_action(
+                format!("namespace:{}", CatalogNamespaceAction::CanListEverything).as_str(),
+            );
         }
     }
 

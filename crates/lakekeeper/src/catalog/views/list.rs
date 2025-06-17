@@ -34,7 +34,7 @@ pub(crate) async fn list_views<C: Catalog, A: Authorizer + Clone, S: SecretStore
     let mut t: <C as Catalog>::Transaction =
         C::Transaction::begin_read(state.v1_state.catalog).await?;
 
-    let _namespace_id = authorized_namespace_ident_to_id::<C, _>(
+    let namespace_id = authorized_namespace_ident_to_id::<C, _>(
         authorizer.clone(),
         &request_metadata,
         &warehouse_id,
@@ -55,6 +55,7 @@ pub(crate) async fn list_views<C: Catalog, A: Authorizer + Clone, S: SecretStore
                 list_views,
                 view_action,
                 namespace,
+                namespace_id,
                 authorizer,
                 request_metadata,
                 warehouse_id
@@ -109,6 +110,8 @@ mod test {
     ) {
         let prof = crate::catalog::test::test_io_profile();
         let authz = HidingAuthorizer::new();
+        // Prevent hidden views from becoming visible through `can_list_everything`.
+        authz.block_can_list_everything();
 
         let (ctx, warehouse) = crate::catalog::test::setup(
             pool.clone(),
@@ -169,6 +172,8 @@ mod test {
         let prof = crate::catalog::test::test_io_profile();
 
         let authz: HidingAuthorizer = HidingAuthorizer::new();
+        // Prevent hidden views from becoming visible through `can_list_everything`.
+        authz.block_can_list_everything();
 
         let (ctx, warehouse) = crate::catalog::test::setup(
             pool.clone(),
@@ -372,5 +377,85 @@ mod test {
         for (idx, i) in (7..10).enumerate() {
             assert_eq!(next_page_items[idx], format!("view-{i}"));
         }
+    }
+
+    #[sqlx::test]
+    async fn test_list_views(pool: sqlx::PgPool) {
+        let prof = crate::catalog::test::test_io_profile();
+
+        let authz: HidingAuthorizer = HidingAuthorizer::new();
+
+        let (ctx, warehouse) = crate::catalog::test::setup(
+            pool.clone(),
+            prof,
+            None,
+            authz.clone(),
+            TabularDeleteProfile::Hard {},
+            Some(UserId::new_unchecked("oidc", "test-user-id")),
+        )
+        .await;
+        let ns = crate::catalog::test::create_ns(
+            ctx.clone(),
+            warehouse.warehouse_id.to_string(),
+            "ns1".to_string(),
+        )
+        .await;
+        let ns_params = NamespaceParameters {
+            prefix: Some(Prefix(warehouse.warehouse_id.to_string())),
+            namespace: ns.namespace.clone(),
+        };
+
+        // create 10 staged views
+        for i in 0..10 {
+            let _ = CatalogServer::create_view(
+                ns_params.clone(),
+                crate::catalog::views::create::test::create_view_request(
+                    Some(&format!("view-{i}")),
+                    None,
+                ),
+                ctx.clone(),
+                DataAccess {
+                    vended_credentials: true,
+                    remote_signing: false,
+                },
+                RequestMetadata::new_unauthenticated(),
+            )
+            .await
+            .unwrap();
+        }
+
+        // By default `HidingAuthorizer` allows everything, meaning the quick check path in
+        // `list_views` will be hit since `can_list_everything: true`.
+        let all = CatalogServer::list_views(
+            ns_params.clone(),
+            ListTablesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.identifiers.len(), 10);
+
+        // Block `can_list_everything` to hit alternative code path.
+        ctx.v1_state.authz.block_can_list_everything();
+        let all = CatalogServer::list_views(
+            ns_params.clone(),
+            ListTablesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.identifiers.len(), 10);
     }
 }

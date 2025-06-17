@@ -43,6 +43,7 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore>
     crate::api::iceberg::v1::namespace::NamespaceService<State<A, C, S>>
     for CatalogServer<C, A, S>
 {
+    #[allow(clippy::too_many_lines)]
     async fn list_namespaces(
         prefix: Option<Prefix>,
         query: ListNamespacesQuery,
@@ -72,13 +73,23 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore>
             .await?;
         let mut t = C::Transaction::begin_read(state.v1_state.catalog.clone()).await?;
 
+        // TODO(#1175): initialize by querying `can_list_everything` on warehouse
+        let mut can_list_everything = false;
         if let Some(parent) = parent {
             let namespace_id = C::namespace_to_id(warehouse_id, parent, t.transaction()).await; // Cannot fail before authz
-            authorizer
+
+            let namespace_id = authorizer
                 .require_namespace_action(
                     &request_metadata,
                     namespace_id,
                     CatalogNamespaceAction::CanListNamespaces,
+                )
+                .await?;
+            can_list_everything = authorizer
+                .is_allowed_namespace_action(
+                    &request_metadata,
+                    namespace_id,
+                    CatalogNamespaceAction::CanListEverything,
                 )
                 .await?;
         }
@@ -108,24 +119,34 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore>
                     let (ids, idents, tokens): (Vec<_>, Vec<_>, Vec<_>) =
                         list_namespaces.into_iter_with_page_tokens().multiunzip();
 
+                    let masks = if can_list_everything {
+                        // No need to check individual permissions if everything in namespace can
+                        // be listed.
+                        vec![true; ids.len()]
+                    } else {
+                        futures::future::try_join_all(ids.iter().map(|n| {
+                            authorizer.is_allowed_namespace_action(
+                                &request_metadata,
+                                *n,
+                                CatalogNamespaceAction::CanGetMetadata,
+                            )
+                        }))
+                        .await?
+                    };
+
                     let (next_namespaces, next_uuids, next_page_tokens, mask): (
                         Vec<_>,
                         Vec<_>,
                         Vec<_>,
                         Vec<bool>,
-                    ) = futures::future::try_join_all(ids.iter().map(|n| {
-                        authorizer.is_allowed_namespace_action(
-                            &request_metadata,
-                            *n,
-                            CatalogNamespaceAction::CanGetMetadata,
-                        )
-                    }))
-                    .await?
-                    .into_iter()
-                    .zip(idents.into_iter().zip(ids.into_iter()))
-                    .zip(tokens.into_iter())
-                    .map(|((allowed, namespace), token)| (namespace.0, namespace.1, token, allowed))
-                    .multiunzip();
+                    ) = masks
+                        .into_iter()
+                        .zip(idents.into_iter().zip(ids.into_iter()))
+                        .zip(tokens.into_iter())
+                        .map(|((allowed, namespace), token)| {
+                            (namespace.0, namespace.1, token, allowed)
+                        })
+                        .multiunzip();
 
                     Ok(UnfilteredPage::new(
                         next_namespaces,
@@ -885,6 +906,90 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[sqlx::test]
+    async fn test_list_namespaces(pool: PgPool) {
+        let prof = crate::catalog::test::test_io_profile();
+
+        let authz = HidingAuthorizer::new();
+
+        let (ctx, warehouse) = crate::catalog::test::setup(
+            pool.clone(),
+            prof,
+            None,
+            authz.clone(),
+            TabularDeleteProfile::Hard {},
+            Some(UserId::new_unchecked("oidc", "test-user-id")),
+        )
+        .await;
+
+        // Create parent namespace.
+        let parent_ns_name = "parent-ns".to_string();
+        let _ = CatalogServer::create_namespace(
+            Some(Prefix(warehouse.warehouse_id.to_string())),
+            CreateNamespaceRequest {
+                namespace: NamespaceIdent::new(parent_ns_name.clone()),
+                properties: None,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+
+        // Create child namespaces.
+        for n in 0..10 {
+            let namespace =
+                NamespaceIdent::from_vec(vec![parent_ns_name.clone(), format!("ns-{n}")]).unwrap();
+            let _ = CatalogServer::create_namespace(
+                Some(Prefix(warehouse.warehouse_id.to_string())),
+                CreateNamespaceRequest {
+                    namespace,
+                    properties: None,
+                },
+                ctx.clone(),
+                RequestMetadata::new_unauthenticated(),
+            )
+            .await
+            .unwrap();
+        }
+
+        // By default `HidingAuthorizer` allows everything, meaning the quick check path in
+        // `list_namespaces` will be hit since `can_list_everything: true`.
+        let all = CatalogServer::list_namespaces(
+            Some(Prefix(warehouse.warehouse_id.to_string())),
+            ListNamespacesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                parent: Some(NamespaceIdent::new(parent_ns_name.clone())),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.namespaces.len(), 10);
+
+        // Block `can_list_everything` to hit alternative code path.
+        ctx.v1_state.authz.block_can_list_everything();
+        let all = CatalogServer::list_namespaces(
+            Some(Prefix(warehouse.warehouse_id.to_string())),
+            ListNamespacesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                parent: Some(NamespaceIdent::new(parent_ns_name)),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.namespaces.len(), 10);
     }
 
     #[sqlx::test]

@@ -94,7 +94,7 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore>
         // ------------------- AUTHZ -------------------
         let authorizer = state.v1_state.authz;
         let mut t = C::Transaction::begin_read(state.v1_state.catalog).await?;
-        let _namespace_id = authorized_namespace_ident_to_id::<C, _>(
+        let namespace_id = authorized_namespace_ident_to_id::<C, _>(
             authorizer.clone(),
             &request_metadata,
             &warehouse_id,
@@ -114,6 +114,7 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore>
                     list_tables,
                     table_action,
                     namespace,
+                    namespace_id,
                     authorizer,
                     request_metadata,
                     warehouse_id
@@ -3008,6 +3009,8 @@ pub(crate) mod test {
         let prof = crate::catalog::test::test_io_profile();
         let base_location = prof.base_location().unwrap();
         let authz = HidingAuthorizer::new();
+        // Prevent hidden tables from becoming visible through `can_list_everything`.
+        authz.block_can_list_everything();
 
         let (ctx, warehouse) = crate::catalog::test::setup(
             pool.clone(),
@@ -3064,6 +3067,8 @@ pub(crate) mod test {
         let prof = crate::catalog::test::test_io_profile();
 
         let authz = HidingAuthorizer::new();
+        // Prevent hidden tables from becoming visible through `can_list_everything`.
+        authz.block_can_list_everything();
 
         let (ctx, warehouse) = crate::catalog::test::setup(
             pool.clone(),
@@ -3263,6 +3268,82 @@ pub(crate) mod test {
         for (idx, i) in (7..10).enumerate() {
             assert_eq!(next_page_items[idx], format!("tab-{i}"));
         }
+    }
+
+    #[sqlx::test]
+    async fn test_list_tables(pool: sqlx::PgPool) {
+        let prof = crate::catalog::test::test_io_profile();
+
+        let authz = HidingAuthorizer::new();
+
+        let (ctx, warehouse) = crate::catalog::test::setup(
+            pool.clone(),
+            prof,
+            None,
+            authz.clone(),
+            TabularDeleteProfile::Hard {},
+            Some(UserId::new_unchecked("oidc", "test-user-id")),
+        )
+        .await;
+        let ns = crate::catalog::test::create_ns(
+            ctx.clone(),
+            warehouse.warehouse_id.to_string(),
+            "ns1".to_string(),
+        )
+        .await;
+        let ns_params = NamespaceParameters {
+            prefix: Some(Prefix(warehouse.warehouse_id.to_string())),
+            namespace: ns.namespace.clone(),
+        };
+        // create 10 staged tables
+        for i in 0..10 {
+            let _ = CatalogServer::create_table(
+                ns_params.clone(),
+                create_request(Some(format!("tab-{i}")), Some(false)),
+                DataAccess {
+                    vended_credentials: true,
+                    remote_signing: false,
+                },
+                ctx.clone(),
+                RequestMetadata::new_unauthenticated(),
+            )
+            .await
+            .unwrap();
+        }
+
+        // By default `HidingAuthorizer` allows everything, meaning the quick check path in
+        // `list_tables` will be hit since `can_list_everything: true`.
+        let all = CatalogServer::list_tables(
+            ns_params.clone(),
+            ListTablesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.identifiers.len(), 10);
+
+        // Block `can_list_everything` to hit alternative code path.
+        ctx.v1_state.authz.block_can_list_everything();
+        let all = CatalogServer::list_tables(
+            ns_params.clone(),
+            ListTablesQuery {
+                page_token: PageToken::NotSpecified,
+                page_size: Some(11),
+                return_uuids: true,
+                return_protection_status: true,
+            },
+            ctx.clone(),
+            RequestMetadata::new_unauthenticated(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(all.identifiers.len(), 10);
     }
 
     #[sqlx::test]
