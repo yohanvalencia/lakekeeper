@@ -6,10 +6,11 @@ use std::{
 };
 
 use axum::Router;
+use futures::future::try_join_all;
 use openfga_client::{
     client::{
-        CheckRequestTupleKey, ReadRequestTupleKey, ReadResponse, Tuple, TupleKey,
-        TupleKeyWithoutCondition,
+        batch_check_single_result::CheckResult, BatchCheckItem, CheckRequestTupleKey,
+        ReadRequestTupleKey, ReadResponse, Tuple, TupleKey, TupleKeyWithoutCondition,
     },
     migration::AuthorizationModelVersion,
     tonic,
@@ -99,6 +100,7 @@ pub struct OpenFGAAuthorizer {
     health: Arc<RwLock<Vec<Health>>>,
 }
 
+/// Implements batch checks for the `are_allowed_x_actions` methods.
 #[async_trait::async_trait]
 impl Authorizer for OpenFGAAuthorizer {
     fn api_doc() -> utoipa::openapi::OpenApi {
@@ -331,6 +333,27 @@ impl Authorizer for OpenFGAAuthorizer {
         .map_err(Into::into)
     }
 
+    async fn are_allowed_namespace_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        namespace_ids: Vec<NamespaceId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogNamespaceAction> + std::fmt::Display + Send,
+    {
+        let items: Vec<_> = namespace_ids
+            .into_iter()
+            .zip(actions.into_iter())
+            .map(|(id, a)| CheckRequestTupleKey {
+                user: metadata.actor().to_openfga(),
+                relation: a.to_string(),
+                object: id.to_openfga(),
+            })
+            .collect();
+        self.batch_check(items).await
+    }
+
     async fn is_allowed_table_action<A>(
         &self,
         metadata: &RequestMetadata,
@@ -349,6 +372,27 @@ impl Authorizer for OpenFGAAuthorizer {
         .map_err(Into::into)
     }
 
+    async fn are_allowed_table_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        table_ids: Vec<TableId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogTableAction> + std::fmt::Display + Send,
+    {
+        let items: Vec<_> = table_ids
+            .into_iter()
+            .zip(actions.into_iter())
+            .map(|(id, a)| CheckRequestTupleKey {
+                user: metadata.actor().to_openfga(),
+                relation: a.to_string(),
+                object: id.to_openfga(),
+            })
+            .collect();
+        self.batch_check(items).await
+    }
+
     async fn is_allowed_view_action<A>(
         &self,
         metadata: &RequestMetadata,
@@ -365,6 +409,27 @@ impl Authorizer for OpenFGAAuthorizer {
         })
         .await
         .map_err(Into::into)
+    }
+
+    async fn are_allowed_view_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        view_ids: Vec<ViewId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogViewAction> + std::fmt::Display + Send,
+    {
+        let items: Vec<_> = view_ids
+            .into_iter()
+            .zip(actions.into_iter())
+            .map(|(id, a)| CheckRequestTupleKey {
+                user: metadata.actor().to_openfga(),
+                relation: a.to_string(),
+                object: id.to_openfga(),
+            })
+            .collect();
+        self.batch_check(items).await
     }
 
     async fn delete_user(&self, _metadata: &RequestMetadata, user_id: UserId) -> Result<()> {
@@ -723,6 +788,69 @@ impl OpenFGAAuthorizer {
                 tracing::error!("Failed to check with OpenFGA: {e}");
             })
             .map_err(Into::into)
+    }
+
+    /// A convenience wrapper around `batch_check`.
+    async fn batch_check(
+        &self,
+        tuple_keys: Vec<impl Into<CheckRequestTupleKey>>,
+    ) -> Result<Vec<bool>> {
+        // Using index into tuple_keys as correlation_id.
+        let num_tuples = tuple_keys.len();
+        let items: Vec<BatchCheckItem> = tuple_keys
+            .into_iter()
+            .enumerate()
+            .map(|(i, tuple_key)| BatchCheckItem {
+                tuple_key: Some(tuple_key.into()),
+                contextual_tuples: None,
+                context: None,
+                correlation_id: i.to_string(),
+            })
+            .collect();
+
+        let chunks: Vec<_> = items.chunks(AUTH_CONFIG.max_batch_check_size).collect();
+        let chunked_raw_results =
+            try_join_all(chunks.iter().map(|&c| self.client.batch_check(c.to_vec())))
+                .await
+                .inspect_err(|e| {
+                    tracing::error!("Failed to check batch with OpenFGA: {e}");
+                })
+                .map_err(Into::<OpenFGAError>::into)
+                .map_err(Into::<IcebergErrorResponse>::into)?;
+
+        let mut results = vec![false; num_tuples];
+        let mut idxs_seen = vec![false; num_tuples];
+        let batch_check_err_type = "OpenFGABatchCheckError";
+        for raw_results_chunk in chunked_raw_results {
+            for (idx, check_result) in raw_results_chunk {
+                let idx: usize = idx.parse().map_err(|e| {
+                    let msg =
+                        format!("OpenFGA batch check correlation id should be usize, got {idx}");
+                    tracing::error!(msg);
+                    ErrorModel::internal(msg, batch_check_err_type, Some(Box::new(e)))
+                })?;
+                match check_result {
+                    CheckResult::Allowed(allowed) => {
+                        results[idx] = allowed;
+                    }
+                    CheckResult::Error(e) => {
+                        let msg = format!("One of the checks in a batch returned an error: {e:?}");
+                        tracing::error!(msg);
+                        let err = ErrorModel::internal(msg, batch_check_err_type, None);
+                        return Err(err.into());
+                    }
+                }
+                idxs_seen[idx] = true;
+            }
+        }
+
+        if !idxs_seen.into_iter().all(|idx_was_seen| idx_was_seen) {
+            let msg = "Missing response for one of the items in an OpenFGA batch check";
+            tracing::error!(msg);
+            let err = ErrorModel::internal(msg, batch_check_err_type, None);
+            return Err(err.into());
+        }
+        Ok(results)
     }
 
     async fn require_action(

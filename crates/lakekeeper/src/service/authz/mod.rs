@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use axum::Router;
+use futures::future::try_join_all;
 use strum::EnumIter;
 use strum_macros::EnumString;
 
@@ -163,6 +164,16 @@ pub enum NamespaceParent {
 /// during Authentication.
 /// `check_actor` ensures that the Actor itself is valid, especially that the principal
 /// is allowed to assume the role.
+///
+/// # Single vs batch checks
+///
+/// Methods `is_allowed_x_action` check a single tuple. When checking many tuples, sending a
+/// separate request for each check is inefficient. Use `are_allowed_x_actions` in these cases
+/// for checking tuples in batches, which sends fewer requests.
+///
+/// Note that doing checks in batches is up to the implementers this trait. The default
+/// implementations of `are_allowed_x_actions` just call `is_allowed_x_action` in parallel for
+/// every item. These default implementations are provided for backwards compatibility.
 pub trait Authorizer
 where
     Self: Send + Sync + 'static + HealthExt + Clone,
@@ -244,6 +255,32 @@ where
     where
         A: From<CatalogNamespaceAction> + std::fmt::Display + Send;
 
+    /// Checks if actions are allowed on namespaces. If supported by the concrete implementation,
+    /// these checks may happen in batches to avoid sending a separate request for each tuple.
+    ///
+    /// Returns `Vec<Ok<bool>>` indicating for each tuple whether the action is allowed. Returns
+    /// `Err` for internal errors.
+    ///
+    /// The default implementation is provided for backwards compatibility and does not support
+    /// batch requests.
+    async fn are_allowed_namespace_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        namespace_ids: Vec<NamespaceId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogNamespaceAction> + std::fmt::Display + Send,
+    {
+        try_join_all(
+            namespace_ids
+                .into_iter()
+                .zip(actions.into_iter())
+                .map(|(id, a)| self.is_allowed_namespace_action(metadata, id, a)),
+        )
+        .await
+    }
+
     /// Return Ok(true) if the action is allowed, otherwise return Ok(false).
     /// Return Err for internal errors.
     async fn is_allowed_table_action<A>(
@@ -254,6 +291,32 @@ where
     ) -> Result<bool>
     where
         A: From<CatalogTableAction> + std::fmt::Display + Send;
+
+    /// Checks if actions are allowed on tables. If supported by the concrete implementation, these
+    /// checks may happen in batches to avoid sending a separate request for each tuple.
+    ///
+    /// Returns `Vec<Ok<bool>>` indicating for each tuple whether the action is allowed. Returns
+    /// `Err` for internal errors.
+    ///
+    /// The default implementation is provided for backwards compatibility and does not support
+    /// batch requests.
+    async fn are_allowed_table_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        table_ids: Vec<TableId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogTableAction> + std::fmt::Display + Send,
+    {
+        try_join_all(
+            table_ids
+                .into_iter()
+                .zip(actions.into_iter())
+                .map(|(id, a)| self.is_allowed_table_action(metadata, id, a)),
+        )
+        .await
+    }
 
     /// Return Ok(true) if the action is allowed, otherwise return Ok(false).
     /// Return Err for internal errors.
@@ -266,6 +329,31 @@ where
     where
         A: From<CatalogViewAction> + std::fmt::Display + Send;
 
+    /// Checks if actions are allowed on views. If supported by the concrete implementation, these
+    /// checks may happen in batches to avoid sending a separate request for each tuple.
+    ///
+    /// Returns `Vec<Ok<bool>>` indicating for each tuple whether the action is allowed. Returns
+    /// `Err` for internal errors.
+    ///
+    /// The default implementation is provided for backwards compatibility and does not support
+    /// batch requests.
+    async fn are_allowed_view_actions<A>(
+        &self,
+        metadata: &RequestMetadata,
+        view_ids: Vec<ViewId>,
+        actions: Vec<A>,
+    ) -> Result<Vec<bool>>
+    where
+        A: From<CatalogViewAction> + std::fmt::Display + Send,
+    {
+        try_join_all(
+            view_ids
+                .into_iter()
+                .zip(actions.into_iter())
+                .map(|(id, a)| self.is_allowed_view_action(metadata, id, a)),
+        )
+        .await
+    }
     /// Hook that is called when a user is deleted.
     async fn delete_user(&self, metadata: &RequestMetadata, user_id: UserId) -> Result<()>;
 

@@ -1610,12 +1610,16 @@ mod tests {
     #[needs_env_var(TEST_OPENFGA = 1)]
     mod openfga {
         use openfga_client::client::TupleKey;
+        use rand::Rng;
         use uuid::Uuid;
 
         use super::super::*;
         use crate::service::{
             authn::UserId,
-            authz::implementations::openfga::migration::tests::authorizer_for_empty_store,
+            authz::{
+                implementations::openfga::migration::tests::authorizer_for_empty_store, Authorizer,
+                CatalogNamespaceAction,
+            },
         };
 
         #[tokio::test]
@@ -1683,6 +1687,76 @@ mod tests {
                     .unwrap();
             assert_eq!(relations.len(), 1);
             assert_eq!(relations, vec![ServerAssignment::Admin(user_id.into())]);
+        }
+
+        /// Verifies that [`Authorizer::batch_check`] correctly dis- and reassembles the input.
+        ///
+        /// Generates a user and a large number of namespaces. For each namespace, it is chosen
+        /// randomly whether the user is granted `modify` permissions. Permissions for all of these
+        /// namespaces are then queried via `batch_check`. As there are many namespaces with random
+        /// `modify` assignments, getting the correct response provides sufficiently high
+        /// probability that `batch_check` is implemented correctly.
+        #[tokio::test]
+        #[tracing_test::traced_test]
+        async fn test_batch_check() {
+            let (_, authorizer) = authorizer_for_empty_store().await;
+
+            let user_id_assignee = UserId::new_unchecked("kubernetes", &Uuid::now_v7().to_string());
+
+            // Generate namespaces. For each randomly decide if assignee is granted modify.
+            let write_chunk_size = 100; // see [`Authorizer::write`]
+            let namespace_ids: Vec<_> = (0..1000).map(|_| NamespaceId::new_random()).collect();
+            let mut permissions = Vec::with_capacity(namespace_ids.len());
+            let mut to_grant = vec![];
+            let mut to_check = Vec::with_capacity(namespace_ids.len());
+            let mut rng = rand::rng();
+            for ns in &namespace_ids {
+                let may_modify: bool = rng.random();
+                permissions.push(may_modify);
+                if may_modify {
+                    to_grant.push(TupleKey {
+                        user: user_id_assignee.to_openfga(),
+                        relation: NamespaceRelation::Modify.to_openfga().to_string(),
+                        object: ns.to_openfga(),
+                        condition: None,
+                    });
+                }
+                to_check.push(CheckRequestTupleKey {
+                    user: Actor::Principal(user_id_assignee.clone()).to_openfga(),
+                    relation: NamespaceAction::Delete.to_openfga().to_string(),
+                    object: ns.to_openfga(),
+                });
+            }
+
+            // Initially assignee can not delete any of the namespaces.
+            let res = authorizer
+                .are_allowed_namespace_actions(
+                    &RequestMetadata::random_human(user_id_assignee.clone()),
+                    namespace_ids.clone(),
+                    vec![CatalogNamespaceAction::CanDelete; namespace_ids.len()],
+                )
+                .await
+                .unwrap();
+            assert_eq!(res, vec![false; namespace_ids.len()]);
+
+            for grant_chunk in to_grant.chunks(write_chunk_size) {
+                authorizer
+                    .write(Some(grant_chunk.to_vec()), None)
+                    .await
+                    .unwrap();
+            }
+
+            // The response matches the randomly granted permissions.
+            // Note: `are_allowed_namespace_actions` calls `batch_check` internally.
+            let res = authorizer
+                .are_allowed_namespace_actions(
+                    &RequestMetadata::random_human(user_id_assignee.clone()),
+                    namespace_ids.clone(),
+                    vec![CatalogNamespaceAction::CanDelete; namespace_ids.len()],
+                )
+                .await
+                .unwrap();
+            assert_eq!(res, permissions);
         }
 
         #[test]
