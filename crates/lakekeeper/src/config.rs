@@ -238,6 +238,10 @@ pub struct DynAppConfig {
     )]
     pub default_tabular_expiration_delay_seconds: chrono::Duration,
 
+    // ------------- Page size for paginated queries -------------
+    pub pagination_size_default: u32,
+    pub pagination_size_max: u32,
+
     // ------------- Stats -------------
     /// Interval to wait before writing the latest accumulated endpoint statistics into the database.
     ///
@@ -509,6 +513,8 @@ impl Default for DynAppConfig {
             secret_backend: SecretBackend::Postgres,
             task_poll_interval: Duration::from_secs(10),
             default_tabular_expiration_delay_seconds: chrono::Duration::days(7),
+            pagination_size_default: 100,
+            pagination_size_max: 1000,
             endpoint_stat_flush_interval: Duration::from_secs(30),
             server_id: uuid::Uuid::nil(),
             serve_swagger_ui: true,
@@ -528,6 +534,13 @@ impl DynAppConfig {
 
     pub fn authn_enabled(&self) -> bool {
         self.openid_provider_uri.is_some()
+    }
+
+    /// Helper for common conversion of optional page size to `i64`.
+    pub fn page_size_or_pagination_max(&self, page_size: Option<i64>) -> i64 {
+        page_size.map_or(self.pagination_size_max.into(), |i| {
+            i.clamp(1, self.pagination_size_max.into())
+        })
     }
 }
 
