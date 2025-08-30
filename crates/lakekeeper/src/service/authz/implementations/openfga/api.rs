@@ -1379,7 +1379,7 @@ pub(super) fn new_v1_router<C: Catalog, S: SecretStore>(
             get(get_table_access_by_id),
         )
         .route(
-            "/permissions/view/{table_id}/access",
+            "/permissions/view/{view_id}/access",
             get(get_view_access_by_id),
         )
         .route(
@@ -1767,7 +1767,8 @@ mod tests {
                         .collect(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .into_inner();
             assert_eq!(res, vec![false; namespace_ids.len()]);
 
             for grant_chunk in to_grant.chunks(write_chunk_size) {
@@ -1788,7 +1789,8 @@ mod tests {
                         .collect(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .into_inner();
             assert_eq!(res, permissions);
         }
 

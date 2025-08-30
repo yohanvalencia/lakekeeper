@@ -82,8 +82,7 @@ pub struct CreateWarehouseRequest {
     /// Optional storage credential to use for the warehouse.
     #[builder(default, setter(strip_option))]
     pub storage_credential: Option<StorageCredential>,
-    /// Profile to determine behavior upon dropping of tabulars, defaults to soft-deletion with
-    /// 7 days expiration.
+    /// Profile to determine behavior upon dropping of tabulars. Default: hard deletion.
     #[serde(default)]
     #[builder(default)]
     pub delete_profile: TabularDeleteProfile,
@@ -414,7 +413,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
         .into_iter()
         .zip(warehouses.into_iter())
         .filter_map(|(allowed, warehouse)| {
-            if allowed {
+            if allowed.into_inner() {
                 Some(warehouse.into())
             } else {
                 None
@@ -906,7 +905,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
                         .zip(idents.into_iter().zip(ids.into_iter()))
                         .zip(tokens.into_iter())
                         .map(|((allowed, namespace), token)| {
-                            (namespace.0, namespace.1, token, allowed)
+                            (namespace.0, namespace.1, token, allowed.into_inner())
                         })
                         .multiunzip();
                         Ok(UnfilteredPage::new(
